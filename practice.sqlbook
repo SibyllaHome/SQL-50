@@ -1,0 +1,556 @@
+-- SQLBook: Code
+--1.查询“01”课程比“02”课程成绩高的所有学生的学号
+use school;
+SELECT * FROM 
+(SELECT * FROM score WHERE score.cid ='01') s1,
+(SELECT * FROM score WHERE score.cid ='02') s2
+WHERE 
+s1.sid = s2.sid and
+s1.score > s2.score;
+-- SQLBook: Code
+--2.查询平均成绩大于60分的同学的学号和平均成绩
+use school;
+SELECT score.sid, AVG(score.score) as avg FROM score GROUP BY score.sid
+HAVING avg > 60; 
+-- SQLBook: Code
+--3.查询所有同学的学号、姓名、选课数、总成绩
+use school;
+SELECT 
+    score.sid, 
+    COUNT(score.cid) OVER (PARTITION BY score.sid),
+    score.score,
+    student.sname
+    FROM score INNER JOIN student
+    ON score.sid = student.sid;
+
+SELECT a.sid,a.sname,
+count(b.cid) as '选课数',
+sum(b.score) as '总成绩'
+FROM Student a
+left join Score b
+on a.sid = b.sid
+group by a.sid,a.sname
+order by a.sid
+-- SQLBook: Code
+--4.查询姓“李”的老师的个数
+SELECT 
+count(tname)
+FROM teacher
+WHERE tname LIKE "李%";
+
+SELECT
+count(1)
+FROM Teacher
+where tname like N'李%';
+-- SQLBook: Code
+--5.查询没学过“张三”老师课的同学的学号、姓名
+SELECT student.sid,student.sname
+FROM student,score
+WHERE 
+student.sid = score.sid
+and score.cid in (
+    select course.cid 
+    from teacher,course 
+    where
+    teacher.tid = course.tid
+    AND teacher.tname <> N'张三'); --逻辑错误 非的并集与并集的非不一样
+
+SELECT
+sid, sname
+FROM Student
+where
+sid not in ( 
+  select s.sid
+  from Score s, Course c, Teacher t
+  where s.cid = c.cid
+  and c.tid=t.tid
+  and t.tname=N'张三')
+-- SQLBook: Code
+--06.查询学过“张三”老师所教的课的同学的学号、姓名；
+select student.sid,student.sname
+from student, score,teacher,course
+    where student.sid = score.sid
+    and score.cid = course.cid
+    and teacher.tid = course.tid
+    and teacher.tname = N'张三';;
+-- SQLBook: Code
+--7.查询学过编号“01”并且也学过编号“02”课程的同学的学号、姓名
+select sid, sname
+from student
+where sid in(
+    select s1.sid from 
+    (select * from score where score.cid = '01') s1,
+    (select * from score where score.cid = '02') s2
+    where s1.sid = s2.sid
+)
+
+select * from
+            Student
+    where sid in
+(
+select sid from Score where Score.cid = '01'
+INTERSECT
+select sid from Score where Score.cid = '02'
+)
+-- SQLBook: Code
+--8.查询课程编号“01”的成绩比课程编号“02”课程低的所有同学的学号、姓名
+select sid,sname
+from student
+where sid in(
+    select s1.sid FROM
+    (select * from score where score.cid = '01') s1,
+    (select * from score where score.cid = '02') s2
+    where s1.sid = s2.sid and s1.score < s2.score
+)
+-- SQLBook: Code
+--9.查询所有课程成绩小于60分的同学的学号、姓名
+select sid,sname
+from student 
+where sid in(
+    select a.sid FROM
+    (select score.sid,
+    (case when MAX(score) OVER(PARTITION BY sid) < 60 then '1'
+    else '0'
+    end) as flag
+    from score) a
+    where flag = '1'
+    );
+
+select st.sid,st.sname
+from student st
+inner join (
+    select sid
+    from score
+    group by score.sid
+    having MAX(score.score) < 60) s
+on st.sid = s.sid;
+-- SQLBook: Code
+--10.查询没有学全所有课的同学的学号、姓名
+select sid, sname,cn
+from
+(select s.sid,s.sname,
+count(sc.cid) as cn
+from student s
+left join score sc
+on s.sid = sc.sid
+group by s.sid,s.sname) full_c
+where cn < 3;
+
+SELECT a.sid,a.sname,
+count(b.cid) as '选课数'
+FROM Student a
+left join Score b
+on a.sid = b.sid
+group by a.sid,a.sname
+having count(b.cid) <> (select count(distinct cid) from Course)
+order by a.sid
+-- SQLBook: Code
+--11.查询至少有一门课与学号为“01”的同学所学相同的同学的学号和姓名
+select distinct s.sid, s.sname
+from 
+student s left join score sc on s.sid = sc.sid
+where s.sid <> '01'
+and(
+    sc.cid in (select cid from score where sid = '01')
+);
+
+select distinct st.sid,st.sname from
+Score s, Student st
+where st.sid = s.sid
+and s.cid in
+(select s.cid from
+Score s, Student st
+where st.sid = s.sid
+and st.sid = '01')
+and st.sid <> '01'
+order by st.sid
+-- SQLBook: Code
+--12.查询和”01”号的同学学习的课程完全相同的其他同学的学号和姓名
+select distinct st.sid,st.sname from
+Score s, Student st
+where st.sid = s.sid
+group by st.sid,st.sname
+having count(s.cid) = (select count(s.cid) from score s, student st where st.sid = s.sid
+and st.sid = '01')
+and st.sid <> '01'
+order by st.sid;
+-- SQLBook: Code
+--14.查询没学过”张三”老师讲授的任一门课程的学生姓名
+select sname
+from student
+where sid not in(
+    select score.sid from score,course,teacher
+    where score.cid = course.cid
+    and course.tid = teacher.tid
+    and teacher.tname = N'张三'
+);
+-- SQLBook: Code
+--15.查询两门及其以上不及格课程的同学的学号，姓名及其平均成绩
+select st.sid,st.sname,
+AVG(s.score) as ave
+from student st, score s
+where st.sid = s.sid
+and s.score < 60
+group by st.sid, st.sname
+having count(s.cid) >= 2;
+-- SQLBook: Code
+--16.检索”01”课程分数小于60，按分数降序排列的学生信息
+select st.sid,st.sname, st.sage, st.ssex,s.score
+from student st, score s
+where st.sid = s.sid
+and s.score < 60
+and s.cid = '01'
+order by s.score desc;
+-- SQLBook: Code
+--17.按平均成绩从高到低显示所有学生的平均成绩
+select st.sid, st.sname, 
+AVG(s.score) as ave
+from student st, score s
+where st.sid = s.sid
+group by st.sid, st.sname
+order by ave desc;
+-- SQLBook: Code
+--18.查询各科成绩最高分、最低分和平均分：以如下形式显示：课程ID，课程name，最高分，最低分，平均分，及格率
+select s.cid as 课程ID,
+c.cname as 课程name,
+MAX(s.score) as 最高分,
+MIN(s.score) as 最低分,
+AVG(s.score) as 平均分,
+AVG (case when s.score >= 60 then 1.0 else 0.0 end ) as 及格率
+from score s, course c
+where s.cid = c.cid
+group by s.cid, c.cname;
+-- SQLBook: Code
+--19.按各科平均成绩从低到高和及格率的百分数从高到低顺序
+select s.cid as 课程ID,
+c.cname as 课程name,
+AVG(s.score) as 平均分,
+AVG (case when s.score >= 60 then 1.0 else 0.0 end ) as 及格率
+from score s, course c
+where s.cid = c.cid
+group by s.cid, c.cname
+order by 平均分, 及格率;
+-- SQLBook: Code
+--20.查询学生的总成绩并进行排名
+select 
+st.sid, 
+st.sname, 
+SUM(s.score) as 总成绩,
+rank() over(order by SUM(s.score) desc) as 排名
+from score s, student st
+where s.sid = st.sid
+group by st.sid,st.sname
+order by 总成绩 desc;
+-- SQLBook: Code
+--21.查询不同老师所教不同课程平均分从高到低显示
+select 
+t.tid,
+t.tname,
+s.cid,
+c.cname,
+AVG(s.score) as ave
+from teacher t, score s, course c
+where s.cid = c.cid
+and c.tid = t.tid
+group by t.tid, t.tname, s.cid, c.cname
+order by ave desc;
+-- SQLBook: Code
+--22.查询所有课程的成绩第2名到第3名的学生信息及该课程成绩
+select
+st.sid, st.sname, s.score, c.cname,
+row_number() over(partition BY s.cid order by s.score desc) as myrank
+from student st, course c, score s
+where s.sid = st.sid
+and c.cid = s.cid
+group by c.cid
+having row_number() over(order by s.score desc) >= 2;
+
+-- row number的使用
+--ROW_NUMBER会依序为所有资料列编号(例如1、2、3、4、5)。RANK为系结提供相同的数值(例如1、2、2、4、5)
+select * from (
+select
+  sc.sid,
+  s.sname,
+  s.ssex,
+  s.sage,
+  c.cname,
+  sc.score,
+  ROW_NUMBER() over(partition BY sc.cid order by score desc) as myrank
+from Score sc,Student s,Course c
+where sc.sid = s.sid
+and sc.cid = c.cid) t
+where t.myrank in (2,3)
+-- SQLBook: Code
+--23.统计各科成绩各分数段人数：课程编号,课程名称,[100-85],[85-70],[70-60],[0-60]及所占百分比
+select c.cid, c.cname,
+SUM (case when s.score >= 85 and s.score <=100 then 1.0 else 0.0 end ) as num85,
+SUM (case when s.score >= 70 and s.score <85 then 1.0 else 0.0 end ) as num70,
+SUM (case when s.score >= 60 and s.score <70 then 1.0 else 0.0 end ) as num60,
+SUM (case when s.score >= 0 and s.score <60 then 1.0 else 0.0 end ) as num0,
+AVG (case when s.score >= 85 and s.score <=100 then 1.0 else 0.0 end ) as passrate85,
+AVG (case when s.score >= 70 and s.score <85 then 1.0 else 0.0 end ) as passrate70,
+AVG (case when s.score >= 60 and s.score <70 then 1.0 else 0.0 end ) as passrate60,
+AVG (case when s.score >= 0 and s.score <60 then 1.0 else 0.0 end ) as passrate0
+from course c, score s
+where s.cid = c.cid
+group by c.cid, c.cname
+-- SQLBook: Code
+--24.查询学生平均成绩及其名次
+select s.sid,st.sname, AVG(s.score) as ave,
+RANK() over(ORDER BY AVG(s.score) desc) as ave_rank
+from score s, student st
+where st.sid = s.sid
+GROUP BY s.sid,st.sname;
+-- SQLBook: Code
+--25.查询各科成绩前三名的记录
+SELECT * FROM(
+    SELECT st.sid, st.sname, c.cname,
+    ROW_NUMBER() OVER(PARTITION BY c.cname ORDER BY s.score) as crank
+    FROM student st, score s, course c
+    WHERE c.cid = s.cid
+)t WHERE t.crank <= 3;
+-- SQLBook: Code
+--26.查询每门课程被选修的学生数
+SELECT distinct c.cid, c.cname, COUNT(s.sid) OVER(PARTITION BY s.cid) as stu_num
+FROM score s, course c
+WHERE c.cid = s.cid;
+
+select
+  c.cname,
+  count(s.sid) as '选课人数'
+from Score s, Course c
+where s.cid = c.cid
+group by c.cname
+-- SQLBook: Code
+--27.查询出只选修了一门课程的全部学生的学号和姓名
+SELECT
+st.sid, st.sname
+FROM student st, score s
+WHERE st.sid = s.sid
+GROUP BY st.sid,st.sname
+HAVING COUNT(s.cid) = 1;
+-- SQLBook: Code
+--28.查询男生、女生人数
+SELECT DISTINCT
+(SELECT COUNT(student.sid) FROM student WHERE student.ssex = '男') as male,
+(SELECT COUNT(student.sid) FROM student WHERE student.ssex = '女') as female
+FROM student;
+
+SELECT
+  ssex,
+  count(sid) as '人数'
+FROM Student
+GROUP BY ssex
+-- SQLBook: Code
+--29.查询名字中含有”风”字的学生信息
+SELECT st.sid, st.sname, st.ssex, st.sage
+FROM student st
+WHERE st.sname LIKE '%风%';
+-- SQLBook: Code
+--30.查询同名同姓学生名单，并统计同名人数
+SELECT t.sname, t.first_name,
+COUNT(t.first_name) OVER(PARTITION BY t.first_name) as same_num
+FROM(
+    SELECT 
+    st.sname,
+    SUBSTR(st.sname,1,1) as last_name,
+    SUBSTR(st.sname,2,CHAR_LENGTH(st.sname)-1) as first_name
+    FROM student st
+) t;
+
+-- 根据姓名和性别分组即可
+SELECT
+  sname,
+  ssex,
+  count(sid)
+FROM Student
+GROUP BY sname,ssex
+-- SQLBook: Code
+--31.查询1990年出生的学生名单(注：Student表中Sage列的类型是datetime)
+SELECT st.sid, st.sname,
+SUBSTR(DATE(st.sage),1,4) as year
+FROM student st
+WHERE SUBSTR(DATE(st.sage),1,4) = '1990';
+
+SELECT
+  *
+FROM Student
+WHERE year(sage) = 1990
+-- SQLBook: Code
+--32.查询每门课程的平均成绩，结果按平均成绩升序排列，平均成绩相同时，按课程号降序排列
+SELECT c.cid, c.cname, AVG(s.score) as ave
+FROM score s, course c
+WHERE s.cid = c.cid
+GROUP BY s.cid, c.cname
+ORDER BY ave asc,c.cid desc;
+-- SQLBook: Code
+--33.查询不及格的课程，并按课程号从大到小排列
+SELECT st.sid, st.sname, s.cid
+FROM student st, score s, course c
+WHERE st.sid = s.sid
+AND s.cid = c.cid
+AND s.score < 60
+ORDER BY s.cid desc;
+-- SQLBook: Code
+--34.查询课程编号为”01”且课程成绩在60分以上的学生的学号和姓名
+SELECT st.sid, st.sname, s.cid, s.score
+FROM student st, score s
+WHERE st.sid = s.sid
+AND s.cid = '01'
+AND s.score >= 60;
+-- SQLBook: Code
+--35.查询所有学生的课程及分数情况
+SELECT st.sid, st.sname,
+
+SELECT 
+st.sname,
+SUM(CASE WHEN c.cname = '语文' THEN s.score END) as 语文,
+SUM(CASE WHEN c.cname = '数学' THEN s.score END) as 数学,
+SUM(CASE WHEN c.cname = '英语' THEN s.score END) as 英语
+FROM student st
+LEFT JOIN score s
+ON st.sid = s.sid
+LEFT JOIN course c
+ON s.cid = c.cid
+GROUP BY st.sname;
+-- SQLBook: Code
+--36.查询任何一门课程成绩在70分以上的姓名、课程名称和分数
+SELECT st.sname, c.cname, s.score
+FROM score s, course c, student st
+WHERE st.sid = s.sid
+AND s.cid = c.cid
+AND s.score >= 70;
+-- SQLBook: Code
+--37.查询课程名称为”数学”，且分数低于60的学生姓名和分数
+SELECT st.sname, s.score
+FROM student st, score s, course c 
+WHERE st.sid = s.sid
+AND s.cid = c.cid
+AND c.cname = '数学'
+AND s.score < 60;
+-- SQLBook: Code
+--38.查询课程编号为03且课程成绩在80分以上的学生的学号和姓名
+SELECT st.sid, st.sname, s.cid, s.score
+FROM student st, score s
+WHERE st.sid = s.sid
+AND s.cid = '03'
+AND s.score >= 80;
+-- SQLBook: Code
+--39.求每门课程的学生人数
+SELECT s.cid, COUNT(s.sid)
+FROM score s
+GROUP BY s.cid;
+-- SQLBook: Code
+--40.查询选修“张三”老师所授课程的学生中，成绩最高的学生姓名及其成绩
+SELECT st.sname, c.cname, s.score
+FROM student st, course c, score s, teacher t
+WHERE st.sid = s.sid
+AND s.cid = c.cid
+AND c.tid = t.tid
+AND t.tname = '张三'
+AND s.score in (
+    SELECT DISTINCT MAX(s.score) 
+    OVER(PARTITION BY s.cid) 
+    FROM score s, course c, teacher t
+    WHERE s.cid = c.cid
+    AND c.tid = t.tid
+    AND t.tname = '张三'
+    );
+
+select
+   s.sid, s.sname, sc.score
+from Score sc, Course c, Teacher t, Student s
+where sc.cid = c.cid
+and c.tid=t.tid
+and sc.sid = s.sid
+and t.tname=N'张三'
+ORDER BY sc.score desc LIMIT 1;
+-- SQLBook: Code
+--41.查询不同课程成绩相同的学生的学生编号、课程编号、学生成绩
+SELECT s1.score, s1.sid, s1.cid
+FROM score s1, score s2
+WHERE s1.score = s2.score
+AND s1.cid <> s2.cid
+AND s1.sid = s2.sid;
+-- SQLBook: Code
+--42.查询每门功课成绩最好的前两名
+SELECT t.sname, t.cname, t.crank
+FROM(
+    SELECT st.sname, c.cname, ROW_NUMBER() OVER(PARTITION BY s.cid ORDER BY s.score desc) as crank
+    FROM student st, score s, course c
+    WHERE st.sid = s.sid
+    AND s.cid = c.cid  
+) t
+WHERE crank < 3;
+-- SQLBook: Code
+--43.统计每门课程的学生选修人数（超过5人的课程才统计）。
+--要求输出课程号和选修人数，查询结果按人数降序排列，若人数相同，按课程号升序排列
+SELECT t.cid, t.cnum
+FROM
+(SELECT s.cid,
+COUNT(s.sid) as cnum
+FROM score s
+GROUP BY s.cid) t
+WHERE t.cnum > 5
+ORDER BY t.cnum desc, t.cid asc;
+-- SQLBook: Code
+--44.检索至少选修两门课程的学生学号
+SELECT t.sid, t.cnum
+FROM
+(SELECT s.sid,
+COUNT(s.cid) as cnum
+FROM score s
+GROUP BY s.sid) t
+WHERE t.cnum >= 2;
+-- SQLBook: Code
+--45.查询选修了全部课程的学生信息
+SELECT t.sid, t.cnum
+FROM
+(SELECT s.sid,
+COUNT(s.cid) as cnum
+FROM score s
+GROUP BY s.sid) t
+WHERE t.cnum = (select count(distinct cid) from Course);
+-- SQLBook: Code
+--46.查询各学生的年龄
+SELECT st.sname, TIMESTAMPDIFF(YEAR,st.sage,CURDATE()) as age
+FROM student st;
+
+SELECT SYSDATETIME();
+SELECT
+    sid,
+    sname,
+    year(SYSDATETIME()) - year(sage) AS '年龄'
+FROM Student
+-- SQLBook: Code
+--47.查询本周过生日的学生
+select DATE_FORMAT(st.sage,'%m-%d') from student st;
+SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY),'%m-%d'); -- 本周周一
+select  DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL (7-WEEKDAY(CURDATE())) DAY),'%m-%d'); -- 下周周一
+SELECT
+  *
+FROM Student st
+where DATE_FORMAT(st.sage,'%m-%d') between
+DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY),'%m-%d')
+and DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL (7-WEEKDAY(CURDATE())) DAY),'%m-%d')
+-- SQLBook: Code
+--48.查询下周过生日的学生
+--同第四十七题
+SELECT
+  *
+FROM Student st
+where DATE_FORMAT(st.sage,'%m-%d') between
+DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE())-7 DAY),'%m-%d')
+and DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL (14-WEEKDAY(CURDATE())) DAY),'%m-%d')
+-- SQLBook: Code
+--49.查询本月过生日的学生
+SELECT
+  *
+FROM Student st
+where DATE_FORMAT(st.sage,'%m') = DATE_FORMAT(CURDATE(),'%m');
+-- SQLBook: Code
+--50.查询下月过生日的学生
+SELECT
+  *
+FROM Student st
+where DATE_FORMAT(st.sage,'%m') = DATE_FORMAT(CURDATE(),'%m')+1;
